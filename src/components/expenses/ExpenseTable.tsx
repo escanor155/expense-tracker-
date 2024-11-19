@@ -168,9 +168,9 @@ export const ExpenseTable: React.FC<ExpenseTableProps> = ({ month }) => {
                     </td>
                     <td className="px-6 py-4 text-sm">
                       <div className="flex flex-wrap gap-1">
-                        {expense.tags?.map((tag, index) => (
+                        {expense.tags?.map((tag) => (
                           <span
-                            key={index}
+                            key={`${expense.id}-${tag}`}
                             className="px-2 py-1 rounded-full text-xs bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300"
                           >
                             {tag}
