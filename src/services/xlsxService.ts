@@ -24,8 +24,74 @@ export class XLSXService {
 
     const wb = XLSX.utils.book_new();
     const ws = XLSX.utils.aoa_to_sheet(sampleData);
-    XLSX.utils.book_append_sheet(wb, ws, 'Template');
 
+    // Add column widths for better readability
+    ws['!cols'] = [
+      { width: 12 }, // Date
+      { width: 30 }, // Description
+      { width: 10 }, // Amount
+      { width: 15 }  // Category
+    ];
+
+    XLSX.utils.book_append_sheet(wb, ws, 'Template');
+    const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+    return new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  }
+
+  static exportExpenses(expenses: Expense[], categories: Category[]): Blob {
+    const headers = ['Date', 'Description', 'Amount', 'Category', 'Tags', 'Note', 'Recurring'];
+    
+    const rows = expenses.map(expense => {
+      const category = categories.find(c => c.id === expense.category);
+      return [
+        format(new Date(expense.date), 'MM/dd/yyyy'),
+        expense.description,
+        expense.amount.toFixed(2),
+        category?.name || '',
+        expense.tags?.join(', ') || '',
+        expense.note || '',
+        expense.isRecurring ? `${expense.isRecurring} (${expense.recurringFrequency})` : 'No'
+      ];
+    });
+
+    const data = [headers, ...rows];
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet(data);
+
+    // Add column widths for better readability
+    ws['!cols'] = [
+      { width: 12 }, // Date
+      { width: 30 }, // Description
+      { width: 10 }, // Amount
+      { width: 15 }, // Category
+      { width: 20 }, // Tags
+      { width: 30 }, // Note
+      { width: 15 }  // Recurring
+    ];
+
+    // Add cell formatting
+    const range = XLSX.utils.decode_range(ws['!ref'] || 'A1');
+    for (let R = range.s.r; R <= range.e.r; ++R) {
+      for (let C = range.s.c; C <= range.e.c; ++C) {
+        const cell_address = XLSX.utils.encode_cell({ r: R, c: C });
+        const cell = ws[cell_address];
+        if (!cell) continue;
+
+        // Format header row
+        if (R === 0) {
+          cell.s = {
+            font: { bold: true },
+            fill: { fgColor: { rgb: "CCCCCC" } }
+          };
+        }
+        // Format amount column
+        else if (C === 2) {
+          cell.z = '#,##0.00';
+        }
+      }
+    }
+
+    XLSX.utils.book_append_sheet(wb, ws, 'Expenses');
     const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
     return new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
   }
@@ -104,18 +170,21 @@ export class XLSXService {
             date: formattedDate,
             description: row.description || '',
             amount,
-            category: matchingCategory.id
+            category: matchingCategory.id,
+            tags: [],
+            isRecurring: false,
+            recurringFrequency: undefined,
+            note: ''
           });
         });
 
         if (errors.length > 0) {
           onError(errors.join('\n'));
-          return;
+        } else {
+          onSuccess(expenses);
         }
-
-        onSuccess(expenses);
       } catch (error) {
-        onError('Failed to parse Excel file. Please make sure it\'s a valid .xlsx file.');
+        onError('Failed to parse Excel file: ' + (error as Error).message);
       } finally {
         onComplete();
       }

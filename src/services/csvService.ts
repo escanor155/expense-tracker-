@@ -26,6 +26,24 @@ export class CSVService {
     return new Blob([csvContent], { type: 'text/csv' });
   }
 
+  static exportExpenses(expenses: Expense[], categories: Category[]): Blob {
+    const headers = ['Date', 'Description', 'Amount', 'Category'];
+    
+    const rows = expenses.map(expense => {
+      const category = categories.find(c => c.id === expense.category);
+      return [
+        format(new Date(expense.date), 'MM/dd/yyyy'),
+        expense.description,
+        expense.amount.toFixed(2),
+        category?.name || ''
+      ];
+    });
+
+    const data = [headers, ...rows];
+    const csvContent = data.map(row => row.join('\t')).join('\n');
+    return new Blob([csvContent], { type: 'text/csv' });
+  }
+
   static parseCSV(
     file: File,
     categories: Category[],
@@ -39,75 +57,81 @@ export class CSVService {
       transformHeader: (header) => header.toLowerCase().trim(),
       delimiter: '',  // Auto-detect delimiter
       complete: (results) => {
-        const errors: string[] = [];
-        const expenses: Partial<Expense>[] = [];
+        try {
+          const errors: string[] = [];
+          const expenses: Partial<Expense>[] = [];
 
-        results.data.forEach((row, index) => {
-          const rowNumber = index + 2; // Account for header row
+          results.data.forEach((row, index) => {
+            const rowNumber = index + 2; // Account for header row
 
-          // Skip empty rows and instruction rows
-          if (
-            Object.values(row).every(val => !val) || 
-            Object.values(row).some(val => String(val).startsWith('#')) ||
-            Object.values(row).some(val => String(val).includes('Format:'))
-          ) {
-            return;
-          }
+            // Skip empty rows and instruction rows
+            if (
+              Object.values(row).every(val => !val) || 
+              Object.values(row).some(val => String(val).startsWith('#')) ||
+              Object.values(row).some(val => String(val).includes('Format:'))
+            ) {
+              return;
+            }
 
-          // Validate required fields
-          if (!row.date || !row.amount || !row.category) {
-            errors.push(`Row ${rowNumber}: Missing required fields`);
-            return;
-          }
+            // Validate required fields
+            if (!row.date || !row.amount || !row.category) {
+              errors.push(`Row ${rowNumber}: Missing required fields`);
+              return;
+            }
 
-          // Validate date format
-          const dateRegex = /^(0?[1-9]|1[0-2])\/(0?[1-9]|[12][0-9]|3[01])\/\d{4}$/;
-          if (!dateRegex.test(row.date)) {
-            errors.push(`Row ${rowNumber}: Invalid date format. Use MM/DD/YYYY`);
-            return;
-          }
+            // Validate and parse date
+            const dateStr = String(row.date);
+            const dateRegex = /^(0?[1-9]|1[0-2])\/(0?[1-9]|[12][0-9]|3[01])\/\d{4}$/;
+            if (!dateRegex.test(dateStr)) {
+              errors.push(`Row ${rowNumber}: Invalid date format. Use MM/DD/YYYY`);
+              return;
+            }
 
-          // Parse date
-          const [month, day, year] = row.date.split('/').map(part => part.trim());
-          const formattedDate = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+            // Parse date
+            const [month, day, year] = dateStr.split('/').map(part => part.trim());
+            const formattedDate = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
 
-          // Validate amount
-          const amount = parseFloat(row.amount);
-          if (isNaN(amount) || amount <= 0) {
-            errors.push(`Row ${rowNumber}: Invalid amount. Must be a positive number`);
-            return;
-          }
+            // Validate amount
+            const amount = parseFloat(row.amount);
+            if (isNaN(amount) || amount <= 0) {
+              errors.push(`Row ${rowNumber}: Invalid amount. Must be a positive number`);
+              return;
+            }
 
-          // Validate category
-          const matchingCategory = categories.find(c => 
-            c.name.toLowerCase() === row.category.toLowerCase().trim()
-          );
-
-          if (!matchingCategory) {
-            errors.push(
-              `Row ${rowNumber}: Invalid category "${row.category}". ` +
-              `Valid categories are: ${categories.map(c => c.name).join(', ')}`
+            // Validate category
+            const category = String(row.category).trim();
+            const matchingCategory = categories.find(c => 
+              c.name.toLowerCase() === category.toLowerCase()
             );
-            return;
-          }
 
-          expenses.push({
-            date: formattedDate,
-            description: row.description || '',
-            amount,
-            category: matchingCategory.id
+            if (!matchingCategory) {
+              errors.push(
+                `Row ${rowNumber}: Invalid category "${category}". ` +
+                `Valid categories are: ${categories.map(c => c.name).join(', ')}`
+              );
+              return;
+            }
+
+            expenses.push({
+              date: formattedDate,
+              description: row.description || '',
+              amount,
+              category: matchingCategory.id
+            });
           });
-        });
 
-        if (errors.length > 0) {
-          onError(errors.join('\n'));
-          return;
+          if (errors.length > 0) {
+            onError(errors.join('\n'));
+          } else {
+            onSuccess(expenses);
+          }
+        } catch (error) {
+          onError('Failed to parse CSV file: ' + (error as Error).message);
+        } finally {
+          onComplete();
         }
-
-        onSuccess(expenses);
-        onComplete();
       },
-      error: (error: Papa.ParseError) => {
+      error: (error) => {
         onError('Failed to parse CSV file: ' + error.message);
         onComplete();
       }
