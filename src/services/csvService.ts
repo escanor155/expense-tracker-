@@ -27,20 +27,30 @@ export class CSVService {
   }
 
   static exportExpenses(expenses: Expense[], categories: Category[]): Blob {
-    const headers = ['Date', 'Description', 'Amount', 'Category'];
+    console.log('CSV Export - Expenses:', JSON.stringify(expenses, null, 2));
+    console.log('CSV Export - Categories:', JSON.stringify(categories, null, 2));
+
+    const headers = ['Date', 'Description', 'Amount', 'Category', 'Tags', 'Note', 'Recurring'];
     
     const rows = expenses.map(expense => {
       const category = categories.find(c => c.id === expense.category);
+      console.log(`Processing expense: ${expense.id}, Category: ${category?.name}`);
       return [
         format(new Date(expense.date), 'MM/dd/yyyy'),
         expense.description,
         expense.amount.toFixed(2),
-        category?.name || ''
+        category?.name || '',
+        expense.tags?.join(', ') || '',
+        expense.note || '',
+        expense.isRecurring ? `${expense.isRecurring} (${expense.recurringFrequency})` : 'No'
       ];
     });
 
     const data = [headers, ...rows];
     const csvContent = data.map(row => row.join('\t')).join('\n');
+    
+    console.log('CSV Content:', csvContent);
+    
     return new Blob([csvContent], { type: 'text/csv' });
   }
 

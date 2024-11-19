@@ -37,7 +37,17 @@ export const ExpenseActions: React.FC<ExpenseActionsProps> = ({
   };
 
   const handleExport = () => {
-    // Implementation for export functionality will go here
+    // Open the FileImport component or trigger export
+    const fileImportElement = document.querySelector('[data-testid="file-import"]') as HTMLElement;
+    if (fileImportElement) {
+      fileImportElement.scrollIntoView({ behavior: 'smooth' });
+    }
+    
+    // You might want to add a method to trigger export from the store or FileImport component
+    const exportButton = document.querySelector('[data-testid="export-button"]') as HTMLButtonElement;
+    if (exportButton) {
+      exportButton.click();
+    }
   };
 
   const handleFilterChange = (newFilters: Partial<ExpenseFilters>) => {

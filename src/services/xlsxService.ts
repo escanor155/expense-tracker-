@@ -39,10 +39,14 @@ export class XLSXService {
   }
 
   static exportExpenses(expenses: Expense[], categories: Category[]): Blob {
+    console.log('XLSX Export - Expenses:', JSON.stringify(expenses, null, 2));
+    console.log('XLSX Export - Categories:', JSON.stringify(categories, null, 2));
+
     const headers = ['Date', 'Description', 'Amount', 'Category', 'Tags', 'Note', 'Recurring'];
     
     const rows = expenses.map(expense => {
       const category = categories.find(c => c.id === expense.category);
+      console.log(`Processing expense: ${expense.id}, Category: ${category?.name}`);
       return [
         format(new Date(expense.date), 'MM/dd/yyyy'),
         expense.description,
@@ -91,8 +95,13 @@ export class XLSXService {
       }
     }
 
+    console.log('Workbook created successfully');
+
     XLSX.utils.book_append_sheet(wb, ws, 'Expenses');
     const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+    
+    console.log('Excel Buffer created:', excelBuffer.length);
+    
     return new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
   }
 

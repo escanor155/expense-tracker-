@@ -34,27 +34,129 @@ export const FileImport: React.FC = () => {
   };
 
   const exportExpenses = () => {
-    try {
-      if (!expenses || expenses.length === 0) {
-        setError('No expenses to export');
-        return;
-      }
+    // Verify store access and data
+    console.log('Store Access Test:');
+    console.log('Expenses Store:', expenses);
+    console.log('Categories Store:', categories);
 
+    // Validate expenses
+    if (!expenses || expenses.length === 0) {
+      console.error('No expenses found');
+      alert('No expenses to export');
+      return;
+    }
+
+    // Validate categories
+    if (!categories || categories.length === 0) {
+      console.error('No categories found');
+      alert('No categories available for export');
+      return;
+    }
+
+    // Detailed expense validation
+    const validExpenses = expenses.filter(expense => {
+      const isValid = !!(
+        expense.date && 
+        expense.amount && 
+        expense.category && 
+        categories.some(cat => cat.id === expense.category)
+      );
+      
+      if (!isValid) {
+        console.warn('Invalid expense found:', expense);
+      }
+      
+      return isValid;
+    });
+
+    console.log('Valid Expenses:', validExpenses);
+
+    if (validExpenses.length === 0) {
+      console.error('No valid expenses to export');
+      alert('No valid expenses found for export');
+      return;
+    }
+
+    try {
       let blob: Blob;
       let filename: string;
 
-      if (selectedFormat === 'xlsx') {
-        blob = XLSXService.exportExpenses(expenses, categories);
-        filename = `expenses-${new Date().toISOString().split('T')[0]}.xlsx`;
-      } else {
-        blob = CSVService.exportExpenses(expenses, categories);
-        filename = `expenses-${new Date().toISOString().split('T')[0]}.csv`;
-      }
+      // Explicit error handling for export
+      try {
+        if (selectedFormat === 'xlsx') {
+          console.log('Attempting XLSX export');
+          blob = XLSXService.exportExpenses(validExpenses, categories);
+          filename = `expenses-${new Date().toISOString().split('T')[0]}.xlsx`;
+          console.log('XLSX Export successful');
+        } else {
+          console.log('Attempting CSV export');
+          blob = CSVService.exportExpenses(validExpenses, categories);
+          filename = `expenses-${new Date().toISOString().split('T')[0]}.csv`;
+          console.log('CSV Export successful');
+        }
 
-      downloadFile(blob, filename);
-      setError(`Successfully exported ${expenses.length} expenses`);
-    } catch (error) {
-      setError('Failed to export expenses: ' + (error as Error).message);
+        console.log('Blob details:', {
+          type: blob.type,
+          size: blob.size,
+          filename: filename
+        });
+
+        // Verify blob creation
+        if (!(blob instanceof Blob)) {
+          throw new Error('Failed to create export blob');
+        }
+
+        // Multiple download methods
+        const downloadMethods = [
+          () => {
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = filename;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(link.href);
+          },
+          () => {
+            const reader = new FileReader();
+            reader.onloadend = () => {
+              const a = document.createElement('a');
+              a.href = reader.result as string;
+              a.download = filename;
+              document.body.appendChild(a);
+              a.click();
+              document.body.removeChild(a);
+            };
+            reader.readAsDataURL(blob);
+          }
+        ];
+
+        // Try download methods
+        let downloadSuccessful = false;
+        for (const method of downloadMethods) {
+          try {
+            method();
+            downloadSuccessful = true;
+            break;
+          } catch (downloadError) {
+            console.warn('Download method failed:', downloadError);
+          }
+        }
+
+        if (!downloadSuccessful) {
+          throw new Error('All download methods failed');
+        }
+
+        setError(`Successfully exported ${validExpenses.length} expenses`);
+      } catch (exportError) {
+        console.error('Export process error:', exportError);
+        alert(`Failed to export expenses: ${(exportError as Error).message}`);
+        setError(`Failed to export expenses: ${(exportError as Error).message}`);
+      }
+    } catch (outerError) {
+      console.error('Outer export error:', outerError);
+      alert(`Unexpected error during export: ${(outerError as Error).message}`);
+      setError(`Unexpected error during export: ${(outerError as Error).message}`);
     }
   };
 
@@ -121,7 +223,7 @@ export const FileImport: React.FC = () => {
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4" data-testid="file-import">
       <h2 className="text-lg font-semibold">Import/Export</h2>
       
       <div className="flex flex-col gap-4">
@@ -156,6 +258,7 @@ export const FileImport: React.FC = () => {
             icon={Upload}
             variant="primary"
             type="button"
+            data-testid="export-button"
           >
             Export Expenses
           </Button>
